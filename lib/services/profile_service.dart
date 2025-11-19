@@ -1,0 +1,384 @@
+import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+class ProfileService extends ChangeNotifier {
+  final _supabase = Supabase.instance.client;
+
+  int _points = 0;
+  int _challengesCompleted = 0;
+  int _totalScans = 0;
+  List<Map<String, dynamic>> _recentActivity = [];
+
+  int get points => _points;
+  int get challengesCompleted => _challengesCompleted;
+  int get totalScans => _totalScans;
+  List<Map<String, dynamic>> get recentActivity => _recentActivity;
+
+  // I-load ang profile stats gikan sa quiz_history ug scans
+  Future<void> loadProfileStats() async {
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) throw Exception('User not logged in');
+
+      debugPrint('Loading profile stats para sa user: $userId');
+
+      // I-sum ang points ug completed challenges gikan sa quiz_history
+      final quizStatsResponse = await _supabase
+          .from('quiz_history')
+          .select('score, is_passing')
+          .eq('user_id', userId);
+
+      final quizStats = (quizStatsResponse as List?) ?? [];
+      int totalPoints = 0;
+      int completedChallenges = 0;
+
+      for (final quiz in quizStats) {
+        final scoreValue = quiz['score'];
+        if (scoreValue is num) {
+          totalPoints += scoreValue.toInt();
+        }
+
+        if (quiz['is_passing'] == true) {
+          completedChallenges += 1;
+        }
+      }
+
+      _points = totalPoints;
+      _challengesCompleted = completedChallenges;
+      debugPrint(
+        'Computed points: $_points, challenges: $_challengesCompleted',
+      );
+
+      // I-count ang total scans gikan sa scans table
+      final scansResponse = await _supabase
+          .from('scans')
+          .select('id')
+          .eq('user_id', userId);
+
+      final scanList = (scansResponse as List?) ?? [];
+      _totalScans = scanList.length;
+      debugPrint('Total scans: $_totalScans');
+
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error loading profile stats: $e');
+      // Set default values kung naa error
+      _points = 0;
+      _challengesCompleted = 0;
+      _totalScans = 0;
+      notifyListeners();
+    }
+  }
+
+  // I-load ang recent activity gikan sa quiz_history ug scans
+  Future<void> loadRecentActivity({int limit = 10}) async {
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) return;
+
+      List<Map<String, dynamic>> activities = [];
+
+      // I-load ang quiz history
+      final quizHistory = await _supabase
+          .from('quiz_history')
+          .select()
+          .eq('user_id', userId)
+          .order('completed_at', ascending: false)
+          .limit(limit);
+
+      // I-convert ang quiz history to activity format
+      for (var quiz in quizHistory) {
+        final correct = (quiz['correct_answers'] ?? 0) as num;
+        final totalQuestions = (quiz['total_questions'] ?? 0) as num;
+        final score = (quiz['score'] ?? 0) as num;
+        final isPassing = (quiz['is_passing'] ?? false) as bool;
+        final quizCreatedAt = quiz['completed_at'];
+        final quizTimestamp = quizCreatedAt is DateTime
+            ? quizCreatedAt.toIso8601String()
+            : (quizCreatedAt?.toString() ?? DateTime.now().toIso8601String());
+
+        double percentage = 0;
+        if (totalQuestions > 0) {
+          percentage = (correct / totalQuestions) * 100;
+        }
+
+        final activityTitle = isPassing
+            ? 'Completed ${quiz['category_name']} Challenge'
+            : 'Attempted ${quiz['category_name']} Quiz';
+
+        activities.add({
+          'activity_type': isPassing ? 'achievement' : 'quiz',
+          'title': activityTitle,
+          'description':
+              'Scored ${correct.toInt()}/${totalQuestions.toInt()} correct • ${percentage.round()}% • +${score.toInt()} pts',
+          'created_at': quizTimestamp,
+          'metadata': {
+            'score': score,
+            'difficulty': quiz['difficulty'],
+            'is_passing': isPassing,
+            'percentage': percentage,
+          },
+        });
+      }
+
+      // I-load pud ang recent scans (optional, kung gusto nimo i-include)
+      try {
+        final recentScans = await _supabase
+            .from('scans')
+            .select('species_name, created_at')
+            .eq('user_id', userId)
+            .order('created_at', ascending: false)
+            .limit(5);
+
+        // I-add ang scans sa activities
+        for (var scan in recentScans) {
+          final scanCreatedAt = scan['created_at'];
+          final scanTimestamp = scanCreatedAt is DateTime
+              ? scanCreatedAt.toIso8601String()
+              : (scanCreatedAt?.toString() ?? DateTime.now().toIso8601String());
+
+          activities.add({
+            'activity_type': 'scan',
+            'title': 'Scanned ${scan['species_name']}',
+            'description': 'Scan saved sa imong mangrove diary',
+            'created_at': scanTimestamp,
+            'metadata': {},
+          });
+        }
+      } catch (e) {
+        debugPrint('Error loading scans: $e');
+      }
+
+      // I-sort ang activities by created_at
+      DateTime parseTimestamp(dynamic value) {
+        if (value is DateTime) return value;
+        if (value is String && value.isNotEmpty) {
+          return DateTime.tryParse(value) ?? DateTime.now();
+        }
+        return DateTime.now();
+      }
+
+      activities.sort((a, b) {
+        final aDate = parseTimestamp(a['created_at']);
+        final bDate = parseTimestamp(b['created_at']);
+        return bDate.compareTo(aDate);
+      });
+
+      // I-limit ang results
+      _recentActivity = activities.take(limit).toList();
+
+      debugPrint('Loaded ${_recentActivity.length} recent activities');
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error loading recent activity: $e');
+      _recentActivity = [];
+      notifyListeners();
+    }
+  }
+
+  // Cache para sa quiz history
+  List<Map<String, dynamic>>? _cachedQuizHistory;
+
+  Future<List<Map<String, dynamic>>> getQuizHistory() async {
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) return [];
+
+      // Kung naa nay cache ug bag-o pa, ibalik ra
+      if (_cachedQuizHistory != null) {
+        return _cachedQuizHistory!;
+      }
+
+      // I-CHANGE NI - gikan quiz_results to quiz_history
+      // Wala nay need i-join ang quiz_categories kay naa naman ang category_name sa quiz_history
+      final response = await _supabase
+          .from('quiz_history') // CHANGED: gikan quiz_results
+          .select('*') // CHANGED: simple select lang, wala nay join
+          .eq('user_id', userId)
+          .order('completed_at', ascending: false);
+
+      // I-format ang data - SIMPLIFIED na kay direct na ang fields
+      final quizHistory = (response as List).map((quiz) {
+        return {
+          'id': quiz['id'],
+          'category_name':
+              quiz['category_name'], // CHANGED: direct na from quiz_history
+          'score': quiz['score'],
+          'total_questions': quiz['total_questions'],
+          'correct_answers': quiz['correct_answers'], // I-include pud ni
+          'completed_at': quiz['completed_at'],
+          'time_spent': quiz['time_spent'] ?? 0,
+          'difficulty': quiz['difficulty'],
+          'is_passing': quiz['is_passing'] ?? false, // I-include pud ni
+        };
+      }).toList();
+
+      // I-save sa cache
+      _cachedQuizHistory = quizHistory;
+
+      debugPrint('Loaded ${quizHistory.length} quiz history records');
+      return quizHistory;
+    } catch (e) {
+      debugPrint('Error loading quiz history: $e');
+      return [];
+    }
+  }
+
+  // BAG-O: Method para mag-delete ng SPECIFIC quiz result LANG
+  Future<void> deleteQuizResult(String quizId) async {
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) {
+        throw Exception('User not authenticated');
+      }
+
+      // I-ensure nga string ang quizId ug trim any whitespace
+      final cleanQuizId = quizId.toString().trim();
+
+      debugPrint(
+        'Attempting to delete quiz with ID: $cleanQuizId for user: $userId',
+      );
+      debugPrint('Quiz ID type: ${cleanQuizId.runtimeType}');
+
+      // IMPORTANTE: I-try pag-query first kung existing ba ang quiz
+      final existingQuiz = await _supabase
+          .from('quiz_history')
+          .select('id, category_name')
+          .eq('id', cleanQuizId)
+          .eq('user_id', userId)
+          .maybeSingle();
+
+      debugPrint('Existing quiz check: $existingQuiz');
+
+      if (existingQuiz == null) {
+        throw Exception(
+          'Quiz not found or you do not have permission to delete it',
+        );
+      }
+
+      // Kung naa, i-delete na
+      final response = await _supabase
+          .from('quiz_history')
+          .delete()
+          .eq('id', cleanQuizId)
+          .eq('user_id', userId)
+          .select();
+
+      debugPrint('Delete response: $response');
+      debugPrint('Successfully deleted quiz: ${existingQuiz['category_name']}');
+
+      // I-clear ang entire cache para ma-reload fresh data
+      _cachedQuizHistory = null;
+
+      // I-notify ang listeners nga nay changes
+      notifyListeners();
+
+      // I-reload ang quiz history para ma-update ang cache
+      await getQuizHistory();
+    } catch (e) {
+      debugPrint('Error deleting quiz result: $e');
+      rethrow;
+    }
+  }
+
+  // Method para i-clear ang cache (gamiton after delete)
+  void clearQuizHistoryCache() {
+    _cachedQuizHistory = null;
+    notifyListeners();
+  }
+
+  // I-mark ang category as completed
+  Future<void> markCategoryAsCompleted(String categoryId) async {
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) throw Exception('User not logged in');
+
+      // I-use ang upsert with onConflict parameter para i-handle ang duplicate
+      await _supabase.from('completed_categories').upsert({
+        'user_id': userId,
+        'category_id': categoryId,
+        'completed_at': DateTime.now().toIso8601String(),
+      }, onConflict: 'user_id,category_id');
+
+      debugPrint('Category $categoryId na-mark/update as completed');
+    } catch (e) {
+      debugPrint('Error marking category as completed: $e');
+    }
+  }
+
+  // I-get ang completed categories
+  Future<Set<String>> getCompletedCategories() async {
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) return {};
+
+      final response = await _supabase
+          .from('completed_categories')
+          .select('category_id')
+          .eq('user_id', userId);
+
+      return (response as List)
+          .map((item) => item['category_id'] as String)
+          .toSet();
+    } catch (e) {
+      debugPrint('Error getting completed categories: $e');
+      return {};
+    }
+  }
+
+  // I-save ang quiz history - simplified, wala na ang user_activity insert
+  Future<void> saveQuizHistory({
+    required String categoryId,
+    required String categoryName,
+    required int score,
+    required int totalQuestions,
+    required int correctAnswers,
+    required int timeSpent,
+    required String difficulty,
+    required bool isPassing,
+  }) async {
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) throw Exception('User not logged in');
+
+      // I-save sa quiz_history table lang
+      await _supabase.from('quiz_history').insert({
+        'user_id': userId,
+        'category_id': categoryId,
+        'category_name': categoryName,
+        'score': score,
+        'total_questions': totalQuestions,
+        'correct_answers': correctAnswers,
+        'time_spent': timeSpent,
+        'difficulty': difficulty,
+        'is_passing': isPassing,
+        'completed_at': DateTime.now().toIso8601String(),
+      });
+
+      debugPrint('Quiz history saved successfully');
+
+      // I-refresh dayon ang activity ug stats para updated ang UI
+      await loadRecentActivity();
+      await loadProfileStats();
+    } catch (e) {
+      debugPrint('Error saving quiz history: $e');
+      rethrow;
+    }
+  }
+
+  // I-add ang points
+  Future<void> addPoints(int points) async {
+    _points += points;
+    debugPrint('Gidugangan ug $points points (temp total: $_points)');
+    notifyListeners();
+  }
+
+  // I-add ang completed challenge count
+  Future<void> addCompletedChallenge() async {
+    _challengesCompleted += 1;
+    debugPrint(
+      'Na-update ang completed challenges (temp total: $_challengesCompleted)',
+    );
+    notifyListeners();
+  }
+}
