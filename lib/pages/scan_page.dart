@@ -978,15 +978,10 @@ class _ScanPageState extends State<ScanPage> {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.timer_outlined,
-              color: accent.withValues(alpha: 0.85),
-              size: 18,
-            ),
             const SizedBox(width: 6),
             Flexible(
               child: Text(
-                'Palihug hulat samtang ga-analisa sa hulagway.',
+                'Please wait while analyzing the image.',
                 style: TextStyle(fontSize: 13, color: accent.withValues(alpha: 0.8)),
                 textAlign: TextAlign.center,
               ),
