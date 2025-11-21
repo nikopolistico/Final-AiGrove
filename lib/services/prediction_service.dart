@@ -12,6 +12,8 @@ class MangroveAssessment {
   final String? message;
   final String rawAssistantContent;
   final dynamic reasoningDetails;
+  final bool
+  allowLocalFallback; // Pasignalan kung pwede ra ta mo-default sa local model
 
   const MangroveAssessment({
     required this.isMangrove,
@@ -19,6 +21,7 @@ class MangroveAssessment {
     this.message,
     required this.rawAssistantContent,
     this.reasoningDetails,
+    this.allowLocalFallback = false,
   });
 
   bool get assistantUnavailable =>
@@ -315,6 +318,10 @@ class PredictionService {
     double bestFlowerScore = -1;
     double? bestFlowerConfidence;
     Map<String, dynamic>? flowerEntry;
+
+    double bestFruitScore = -1;
+    double? bestFruitConfidence;
+    Map<String, dynamic>? fruitEntry;
     final List<Map<String, dynamic>> topTags = [];
 
     for (final dynamic entry in tags) {
@@ -369,12 +376,23 @@ class PredictionService {
           flowerEntry = entry;
         }
       }
+
+      if (lowerLabel.contains('fruit')) {
+        final double score = confidence ?? 0.0;
+        if (score > bestFruitScore) {
+          bestFruitScore = score;
+          bestFruitConfidence = confidence;
+          fruitEntry = entry;
+        }
+      }
     }
 
-    final bool hasTreeAndLeaf = treeEntry != null && leafEntry != null;
+    final bool hasTree = treeEntry != null;
+    final bool hasLeaf = leafEntry != null;
     final bool hasFlower = flowerEntry != null;
+    final bool hasFruit = fruitEntry != null;
 
-    if (!hasTreeAndLeaf && !hasFlower) {
+    if (!hasTree && !hasLeaf && !hasFlower && !hasFruit) {
       final String rawContent = jsonEncode({
         'source': 'imagga',
         'upload_id': uploadId,
@@ -385,7 +403,8 @@ class PredictionService {
       return MangroveAssessment(
         isMangrove: false,
         confidence: null,
-        message: 'No, this image does not contain a tree.',
+        message:
+            'No, this image does not contain a tree, leaf, flower, or fruit cue.',
         rawAssistantContent: rawContent,
         reasoningDetails: tags,
       );
@@ -393,45 +412,61 @@ class PredictionService {
 
     double chosenConfidence;
     String detectionSource;
-    if (hasTreeAndLeaf) {
-      final double treeScore = bestTreeConfidence ?? bestTreeScore;
-      final double leafScore = bestLeafConfidence ?? bestLeafScore;
-      chosenConfidence = treeScore < leafScore ? treeScore : leafScore;
-      detectionSource = 'tree_and_leaf';
-    } else {
+    if (hasTree) {
+      chosenConfidence = bestTreeConfidence ?? bestTreeScore;
+      detectionSource = 'tree';
+    } else if (hasLeaf) {
+      chosenConfidence = bestLeafConfidence ?? bestLeafScore;
+      detectionSource = 'leaf';
+    } else if (hasFlower) {
       chosenConfidence = bestFlowerConfidence ?? bestFlowerScore;
       detectionSource = 'flower';
+    } else {
+      chosenConfidence = bestFruitConfidence ?? bestFruitScore;
+      detectionSource = 'fruit';
     }
 
     final double? normalizedConfidence = chosenConfidence >= 0
         ? chosenConfidence / 100.0
         : null;
 
-    final String rawContent = jsonEncode({
+    final Map<String, dynamic> payloadBase = {
       'source': 'imagga',
       'upload_id': uploadId,
-      'isMangrove': true,
       'confidence': normalizedConfidence,
       'detection_source': detectionSource,
       'treeTag': treeEntry,
       'leafTag': leafEntry,
       'flowerTag': flowerEntry,
+      'fruitTag': fruitEntry,
       'topTags': topTags,
-    });
+    };
+
+    final Map<String, dynamic> reasoningBase = {
+      'detection_source': detectionSource,
+      'treeTag': treeEntry,
+      'leafTag': leafEntry,
+      'flowerTag': flowerEntry,
+      'fruitTag': fruitEntry,
+    };
+
+    final String rawContent = jsonEncode({...payloadBase, 'isMangrove': true});
 
     return MangroveAssessment(
       isMangrove: true,
       confidence: normalizedConfidence,
+      // Tagalog/Bisaya: Conditional message depende sa detection source
       message: detectionSource == 'flower'
-          ? 'Yes, this image contains a flowering plant.'
-          : 'Yes, this image contains a tree with leaves.',
+          ? 'Yes, this image contains a flowering mangrove.'
+          : detectionSource == 'fruit'
+          ? 'Yes, this image contains a fruit-bearing mangrove.'
+          : detectionSource == 'tree'
+          ? 'Yes, this image contains a mangrove tree.'
+          : detectionSource == 'leaf'
+          ? 'Yes, this image contains a mangrove leaf.'
+          : 'Yes, this image contains a mangrove.', // Default message kung wala sa mga above
       rawAssistantContent: rawContent,
-      reasoningDetails: {
-        'detection_source': detectionSource,
-        'treeTag': treeEntry,
-        'leafTag': leafEntry,
-        'flowerTag': flowerEntry,
-      },
+      reasoningDetails: reasoningBase,
     );
   }
 

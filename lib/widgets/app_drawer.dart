@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../pages/profile_page.dart';
 import '../pages/history_page.dart'; // I-add para direct navigation
 import '../pages/about_page.dart'; // I-add para direct navigation
+import '../pages/settings_page.dart';
 import '../services/user_service.dart';
 
 class AppDrawer extends StatelessWidget {
@@ -247,10 +248,21 @@ void _navigateToSettings(BuildContext context) {
   try {
     Navigator.pushNamed(context, '/settings');
   } catch (e) {
-    debugPrint('Error navigating to settings: $e');
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Settings page not available')),
-    );
+    debugPrint('Error using named route for settings: $e');
+    // Fallback sa direct navigation gamit ang SettingsPage
+    try {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const SettingsPage()),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content:
+              Text('Settings page not found. Please check implementation.'),
+        ),
+      );
+    }
   }
 }
 

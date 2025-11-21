@@ -51,7 +51,9 @@ class _PredictionDemoPageState extends State<PredictionDemoPage> {
           .assessMangrove(_imageBytes!);
 
       DetectionResult? detection;
-      if (assessment.assistantUnavailable || assessment.isMangrove) {
+      if (assessment.assistantUnavailable ||
+          assessment.allowLocalFallback ||
+          assessment.isMangrove) {
         final file = _imageFile;
         if (file != null && await file.exists()) {
           await _mlService.loadModel();

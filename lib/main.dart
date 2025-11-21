@@ -36,8 +36,8 @@ void main() async {
 
   // PANAHOM: Ang Imagga API key ug secret gibutang dire para sayon testing.
   // AYAW i-commit ang tinuod ninyo nga kredensyal sa public repo; mas maayo kung `.env` lang sa lokal.
-  final imaggaApiKey = 'acc_25f5a8a7e7c4389';
-  final imaggaApiSecret = 'b8a4d7a7b93fd12256191d2b42f801ca';
+  final imaggaApiKey = 'acc_d144bb6dc2c5204';
+  final imaggaApiSecret = 'c30b8dff862bea1c7e5445a814621b34';
   final predictionService = PredictionService(
     imaggaApiKey: imaggaApiKey,
     imaggaApiSecret: imaggaApiSecret,

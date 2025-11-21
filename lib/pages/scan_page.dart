@@ -335,6 +335,7 @@ class _ScanPageState extends State<ScanPage> {
       final String trimmedAssistant = assessment.rawAssistantContent.trim();
       final bool assistantUnavailable = assessment.assistantUnavailable;
       final bool assistantEmpty = trimmedAssistant.isEmpty;
+      final bool forceLocalFallback = assessment.allowLocalFallback;
 
       if (assistantUnavailable || assistantEmpty) {
         debugPrint(
@@ -354,15 +355,32 @@ class _ScanPageState extends State<ScanPage> {
             ),
           );
         }
+      } else if (forceLocalFallback) {
+        debugPrint(
+          '⚠️ Assistant wala makit-an og klarong mangrove cues, padayon ta sa local classifier.',
+        );
+        if (mounted) {
+          final String helperMessage = assessment.message != null
+              ? assessment.message!
+              : 'Assistant wala makumpirma nga mangrove ani, padayon sa local model.';
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(helperMessage),
+              backgroundColor: Colors.orange[700],
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
       }
 
-      final bool skipAssistantGate = assistantUnavailable || assistantEmpty;
-      final bool isMangrove = skipAssistantGate ? true : assessment.isMangrove;
+      final bool bypassAssistant =
+          assistantUnavailable || assistantEmpty || forceLocalFallback;
+      final bool isMangrove = bypassAssistant ? true : assessment.isMangrove;
 
       if (!isMangrove) {
         // Assistant flagged nga dili mangrove, so pakita nato ang info card
         debugPrint(
-          'STOP: Imagga wala nakakita ug tree tag, dili nato paandaron ang lokal nga model.',
+          'STOP: Image does not show mangrove traits, model will not run.',
         );
         if (!mounted) return;
         setState(() {
@@ -383,7 +401,7 @@ class _ScanPageState extends State<ScanPage> {
         if (!mounted) return;
         setState(() {
           _errorMessage =
-              'Local model failed to identify this image. Please retake the photo.';
+              'Model failed to identify this image. Please retake the photo.';
           _isLoading = false;
         });
         _showError(_errorMessage!);
@@ -578,7 +596,7 @@ class _ScanPageState extends State<ScanPage> {
                 // Padayon nga square preview bisan nag-process pa
                 Image.file(imageToDisplay, fit: BoxFit.cover),
                 Container(color: _mintGreen.withValues(alpha: 0.35)),
-                Center(child: _buildProcessingIcon()),
+                Center(child: _buildProcessingStatus()),
               ],
             ),
           ),
@@ -591,7 +609,7 @@ class _ScanPageState extends State<ScanPage> {
         aspectRatio: 1,
         child: Container(
           color: _mintGreen,
-          child: Center(child: _buildProcessingIcon()),
+          child: Center(child: _buildProcessingStatus()),
         ),
       );
     }
@@ -925,9 +943,55 @@ class _ScanPageState extends State<ScanPage> {
       height: iconSize,
       child: CircularProgressIndicator(
         strokeWidth: 6,
-        valueColor: AlwaysStoppedAnimation<Color>(Colors.green[700]!),
+        valueColor: const AlwaysStoppedAnimation<Color>(Colors.black),
         backgroundColor: Colors.white.withValues(alpha: 0.4),
       ),
+    );
+  }
+
+  Widget _buildProcessingStatus() {
+    // Pakita og klarong status text samtang nag-scan ang hulagway
+    const Color accent = Colors.black;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildProcessingIcon(),
+        const SizedBox(height: 12),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.travel_explore_rounded, color: accent, size: 20),
+            const SizedBox(width: 6),
+            Text(
+              'Searching mangroves...',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: accent,
+                letterSpacing: 0.4,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                'Please wait while we identify the mangrove species.',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: accent.withValues(alpha: 0.8),
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -955,69 +1019,126 @@ class _ScanPageState extends State<ScanPage> {
           ),
         ],
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(
-            child: ElevatedButton.icon(
-              onPressed: _isLoading ? null : _pickImageFromGallery,
-              icon: const Icon(Icons.photo_library_rounded, size: 24),
-              label: const Text(
-                'Gallery',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                backgroundColor: isGallerySelected
-                    ? Colors.green[700]
-                    : (isDarkMode ? Colors.grey[800] : Colors.white),
-                foregroundColor: isGallerySelected
-                    ? Colors.white
-                    : Colors.green[700],
-                elevation: isGallerySelected ? 4 : 0,
-                shadowColor: isGallerySelected
-                    ? Colors.green[700]!.withValues(alpha: 0.5)
-                    : null,
-                side: isGallerySelected
-                    ? null
-                    : BorderSide(color: Colors.green[700]!, width: 2),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
+          if (_selectedImage != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: _buildSelectionPreview(),
+            ),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _isLoading ? null : _pickImageFromGallery,
+                  icon: const Icon(Icons.photo_library_rounded, size: 24),
+                  label: const Text(
+                    'Gallery',
+                    style:
+                        TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    backgroundColor: isGallerySelected
+                        ? Colors.green[700]
+                        : (isDarkMode ? Colors.grey[800] : Colors.white),
+                    foregroundColor: isGallerySelected
+                        ? Colors.white
+                        : Colors.green[700],
+                    elevation: isGallerySelected ? 4 : 0,
+                    shadowColor: isGallerySelected
+                        ? Colors.green[700]!.withValues(alpha: 0.5)
+                        : null,
+                    side: isGallerySelected
+                        ? null
+                        : BorderSide(color: Colors.green[700]!, width: 2),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
                 ),
               ),
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: ElevatedButton.icon(
-              onPressed: _isLoading ? null : _takePhoto,
-              icon: const Icon(Icons.camera_alt_rounded, size: 24),
-              label: const Text(
-                'Camera',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                backgroundColor: isCameraSelected
-                    ? Colors.green[700]
-                    : (isDarkMode ? Colors.grey[800] : Colors.white),
-                foregroundColor: isCameraSelected
-                    ? Colors.white
-                    : Colors.green[700],
-                elevation: isCameraSelected ? 4 : 0,
-                shadowColor: isCameraSelected
-                    ? Colors.green[700]!.withValues(alpha: 0.5)
-                    : null,
-                side: isCameraSelected
-                    ? null
-                    : BorderSide(color: Colors.green[700]!, width: 2),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
+              const SizedBox(width: 16),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _isLoading ? null : _takePhoto,
+                  icon: const Icon(Icons.camera_alt_rounded, size: 24),
+                  label: const Text(
+                    'Camera',
+                    style:
+                        TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    backgroundColor: isCameraSelected
+                        ? Colors.green[700]
+                        : (isDarkMode ? Colors.grey[800] : Colors.white),
+                    foregroundColor: isCameraSelected
+                        ? Colors.white
+                        : Colors.green[700],
+                    elevation: isCameraSelected ? 4 : 0,
+                    shadowColor: isCameraSelected
+                        ? Colors.green[700]!.withValues(alpha: 0.5)
+                        : null,
+                    side: isCameraSelected
+                        ? null
+                        : BorderSide(color: Colors.green[700]!, width: 2),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
                 ),
               ),
-            ),
+            ],
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildSelectionPreview() {
+    // Ipakita ang thumbnail sa pinakabag-ong gipili nga hulagway
+    final File? previewFile = _processedImage ?? _selectedImage;
+    if (previewFile == null || !previewFile.existsSync()) {
+      return const SizedBox.shrink();
+    }
+
+    final bool fromCamera = _lastSelectedSource == 'camera';
+    final IconData icon = fromCamera
+        ? Icons.photo_camera_back_outlined
+        : Icons.photo_library_outlined;
+    final String label = fromCamera ? 'Camera preview' : 'Gallery preview';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(icon, color: Colors.green[700]),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: Colors.green[700],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: AspectRatio(
+            aspectRatio: 3 / 2,
+            child: Image.file(
+              previewFile,
+              fit: BoxFit.cover,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
