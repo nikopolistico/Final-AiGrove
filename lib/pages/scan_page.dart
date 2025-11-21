@@ -978,14 +978,16 @@ class _ScanPageState extends State<ScanPage> {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            Icon(
+              Icons.timer_outlined,
+              color: accent.withValues(alpha: 0.85),
+              size: 18,
+            ),
             const SizedBox(width: 6),
             Flexible(
               child: Text(
-                'Please wait while we identify the mangrove species.',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: accent.withValues(alpha: 0.8),
-                ),
+                'Palihug hulat samtang ga-analisa sa hulagway.',
+                style: TextStyle(fontSize: 13, color: accent.withValues(alpha: 0.8)),
                 textAlign: TextAlign.center,
               ),
             ),
@@ -1019,126 +1021,69 @@ class _ScanPageState extends State<ScanPage> {
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: Row(
         children: [
-          if (_selectedImage != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: _buildSelectionPreview(),
+          Expanded(
+            child: ElevatedButton.icon(
+              onPressed: _isLoading ? null : _pickImageFromGallery,
+              icon: const Icon(Icons.photo_library_rounded, size: 24),
+              label: const Text(
+                'Gallery',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                backgroundColor: isGallerySelected
+                    ? Colors.green[700]
+                    : (isDarkMode ? Colors.grey[800] : Colors.white),
+                foregroundColor: isGallerySelected
+                    ? Colors.white
+                    : Colors.green[700],
+                elevation: isGallerySelected ? 4 : 0,
+                shadowColor: isGallerySelected
+                    ? Colors.green[700]!.withValues(alpha: 0.5)
+                    : null,
+                side: isGallerySelected
+                    ? null
+                    : BorderSide(color: Colors.green[700]!, width: 2),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
             ),
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: _isLoading ? null : _pickImageFromGallery,
-                  icon: const Icon(Icons.photo_library_rounded, size: 24),
-                  label: const Text(
-                    'Gallery',
-                    style:
-                        TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    backgroundColor: isGallerySelected
-                        ? Colors.green[700]
-                        : (isDarkMode ? Colors.grey[800] : Colors.white),
-                    foregroundColor: isGallerySelected
-                        ? Colors.white
-                        : Colors.green[700],
-                    elevation: isGallerySelected ? 4 : 0,
-                    shadowColor: isGallerySelected
-                        ? Colors.green[700]!.withValues(alpha: 0.5)
-                        : null,
-                    side: isGallerySelected
-                        ? null
-                        : BorderSide(color: Colors.green[700]!, width: 2),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: ElevatedButton.icon(
+              onPressed: _isLoading ? null : _takePhoto,
+              icon: const Icon(Icons.camera_alt_rounded, size: 24),
+              label: const Text(
+                'Camera',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                backgroundColor: isCameraSelected
+                    ? Colors.green[700]
+                    : (isDarkMode ? Colors.grey[800] : Colors.white),
+                foregroundColor: isCameraSelected
+                    ? Colors.white
+                    : Colors.green[700],
+                elevation: isCameraSelected ? 4 : 0,
+                shadowColor: isCameraSelected
+                    ? Colors.green[700]!.withValues(alpha: 0.5)
+                    : null,
+                side: isCameraSelected
+                    ? null
+                    : BorderSide(color: Colors.green[700]!, width: 2),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
                 ),
               ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: _isLoading ? null : _takePhoto,
-                  icon: const Icon(Icons.camera_alt_rounded, size: 24),
-                  label: const Text(
-                    'Camera',
-                    style:
-                        TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    backgroundColor: isCameraSelected
-                        ? Colors.green[700]
-                        : (isDarkMode ? Colors.grey[800] : Colors.white),
-                    foregroundColor: isCameraSelected
-                        ? Colors.white
-                        : Colors.green[700],
-                    elevation: isCameraSelected ? 4 : 0,
-                    shadowColor: isCameraSelected
-                        ? Colors.green[700]!.withValues(alpha: 0.5)
-                        : null,
-                    side: isCameraSelected
-                        ? null
-                        : BorderSide(color: Colors.green[700]!, width: 2),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildSelectionPreview() {
-    // Ipakita ang thumbnail sa pinakabag-ong gipili nga hulagway
-    final File? previewFile = _processedImage ?? _selectedImage;
-    if (previewFile == null || !previewFile.existsSync()) {
-      return const SizedBox.shrink();
-    }
-
-    final bool fromCamera = _lastSelectedSource == 'camera';
-    final IconData icon = fromCamera
-        ? Icons.photo_camera_back_outlined
-        : Icons.photo_library_outlined;
-    final String label = fromCamera ? 'Camera preview' : 'Gallery preview';
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(icon, color: Colors.green[700]),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: Colors.green[700],
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(14),
-          child: AspectRatio(
-            aspectRatio: 3 / 2,
-            child: Image.file(
-              previewFile,
-              fit: BoxFit.cover,
-            ),
-          ),
-        ),
-      ],
     );
   }
 }
