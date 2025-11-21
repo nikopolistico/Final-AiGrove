@@ -156,7 +156,7 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                         child: ClipOval(
                           child: Image.asset(
-                            'assets/Aigroove.png',
+                            'assets/app_logo.png',
                             fit: BoxFit.cover,
                             errorBuilder: (context, error, stackTrace) => Icon(
                               Icons.eco,

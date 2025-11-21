@@ -69,10 +69,10 @@ dev_dependencies:
 flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
-  image_path: "assets/Aigroove.png" # I-replace ni sa path sa imong logo
+  image_path: "assets/app_logo.png" # I-replace ni sa path sa imong logo
   min_sdk_android: 21
   adaptive_icon_background: "#FFFFFF" # Optional background color for Android adaptive icons
-  adaptive_icon_foreground: "assets/Aigroove.png" # Optional, para sa Android 8+
+  adaptive_icon_foreground: "assets/app_logo.png" # Optional, para sa Android 8+
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -85,7 +85,7 @@ flutter:
   uses-material-design: true
 
   assets:
-    - assets/Aigroove.png
+    - assets/app_logo.png
     - assets/landing_bg.jpg
     - assets/images/james_espana.jpeg
     - assets/images/rovannah_delola.jpg
