@@ -393,16 +393,30 @@ class PredictionService {
     final bool hasFruit = fruitEntry != null;
 
     if (!hasTree && !hasLeaf && !hasFlower && !hasFruit) {
+      // If Imagga returned tags but none matched tree/leaf/flower/fruit,
+      // provide a best-tag confidence so the UI can display a numeric
+      // indication even for a "not mangrove" outcome.
+      double bestTagConf = -1.0;
+      for (final t in topTags) {
+        final dynamic c = t['confidence'];
+        if (c is double && c > bestTagConf) bestTagConf = c;
+      }
+
+      final double? normalizedConfidence = bestTagConf >= 0
+          ? bestTagConf
+          : null;
+
       final String rawContent = jsonEncode({
         'source': 'imagga',
         'upload_id': uploadId,
         'isMangrove': false,
-        'confidence': null,
+        'confidence': normalizedConfidence,
         'topTags': topTags,
       });
+
       return MangroveAssessment(
         isMangrove: false,
-        confidence: null,
+        confidence: normalizedConfidence,
         message:
             'No, this image does not contain a tree, leaf, flower, or fruit cue.',
         rawAssistantContent: rawContent,

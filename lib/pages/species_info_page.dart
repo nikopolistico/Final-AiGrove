@@ -13,7 +13,6 @@ class SpeciesInfoPage extends StatelessWidget {
 
   // Mint palette para uniform ang branding
   static const Color _mintPrimary = Color(0xFF3EB489);
-  static const Color _mintSecondary = Color(0xFFA7F3D0);
   static const Color _mintDark = Color(0xFF1F6F5F);
 
   const SpeciesInfoPage({
@@ -181,7 +180,10 @@ class SpeciesInfoPage extends StatelessWidget {
         gradient: const LinearGradient(
           begin: Alignment.centerLeft,
           end: Alignment.centerRight,
-          colors: [Color.fromARGB(255, 31, 98, 67), Color.fromARGB(255, 12, 135, 22)],
+          colors: [
+            Color.fromARGB(255, 31, 98, 67),
+            Color.fromARGB(255, 12, 135, 22),
+          ],
         ),
         borderRadius: BorderRadius.circular(30),
         boxShadow: [

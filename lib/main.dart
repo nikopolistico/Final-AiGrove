@@ -9,7 +9,6 @@ import 'package:provider/provider.dart';
 import 'services/user_service.dart';
 import 'services/profile_service.dart';
 import 'services/prediction_service.dart';
-import 'pages/prediction_demo.dart';
 import 'pages/home_page.dart';
 import 'pages/scan_page.dart';
 import 'pages/map_page.dart';
@@ -36,8 +35,8 @@ void main() async {
 
   // PANAHOM: Ang Imagga API key ug secret gibutang dire para sayon testing.
   // AYAW i-commit ang tinuod ninyo nga kredensyal sa public repo; mas maayo kung `.env` lang sa lokal.
-  final imaggaApiKey = 'acc_d144bb6dc2c5204';
-  final imaggaApiSecret = 'c30b8dff862bea1c7e5445a814621b34';
+  final imaggaApiKey = 'acc_3ad54d1d4fb7110';
+  final imaggaApiSecret = '229bfbca69f72cc596fab126b55967ff';
   final predictionService = PredictionService(
     imaggaApiKey: imaggaApiKey,
     imaggaApiSecret: imaggaApiSecret,
@@ -93,7 +92,6 @@ class _MyAppState extends State<MyApp> {
         '/landing': (context) => const LandingPage(),
         '/login': (context) => const LoginPage(),
         '/register': (context) => const RegisterPage(),
-        '/prediction_demo': (context) => const PredictionDemoPage(),
         '/home': (context) =>
             MainScreen(isDark: isDark, toggleTheme: toggleTheme),
         '/profile': (context) => const ProfilePage(),

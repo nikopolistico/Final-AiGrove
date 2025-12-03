@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'dart:convert';
 import 'package:image/image.dart' as img;
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -38,6 +39,9 @@ class _ScanPageState extends State<ScanPage> {
   bool _isLoading = false;
   String? _errorMessage;
   bool _nonMangroveResult = false;
+  double?
+  _assistantConfidence; // Confidence returned by assistant/Imagga when available
+  String? _assistantTopTag;
   String?
   _lastSelectedSource; // Track which button was last pressed ('camera' or 'gallery')
 
@@ -332,6 +336,22 @@ class _ScanPageState extends State<ScanPage> {
 
       final MangroveAssessment assessment = await predictionService
           .assessMangrove(processedImageBytes);
+      // Try to extract Imagga top tag label from the assistant's raw content
+      String? assistantTopTag;
+      try {
+        final decoded = jsonDecode(assessment.rawAssistantContent);
+        if (decoded is Map && decoded['topTags'] is List) {
+          final List top = decoded['topTags'] as List;
+          if (top.isNotEmpty) {
+            final first = top[0];
+            if (first is Map && first['label'] is String) {
+              assistantTopTag = first['label'] as String;
+            }
+          }
+        }
+      } catch (e) {
+        // ignore parse errors
+      }
       final String trimmedAssistant = assessment.rawAssistantContent.trim();
       final bool assistantUnavailable = assessment.assistantUnavailable;
       final bool assistantEmpty = trimmedAssistant.isEmpty;
@@ -386,9 +406,15 @@ class _ScanPageState extends State<ScanPage> {
         setState(() {
           _detections = null;
           _nonMangroveResult = true;
+          _assistantConfidence = assessment.confidence;
+          _assistantTopTag = assistantTopTag;
           _isLoading = false;
         });
-        _showNonMangroveInfo(assessment.message);
+        _showNonMangroveInfo(
+          assessment.message,
+          assessment.confidence,
+          assistantTopTag,
+        );
         return;
       }
 
@@ -424,6 +450,8 @@ class _ScanPageState extends State<ScanPage> {
       setState(() {
         _detections = [detectionToSave];
         _nonMangroveResult = false;
+        _assistantConfidence = null;
+        _assistantTopTag = null;
         _isLoading = false;
       });
 
@@ -498,18 +526,29 @@ class _ScanPageState extends State<ScanPage> {
     );
   }
 
-  void _showNonMangroveInfo(String? assistantMessage) {
+  void _showNonMangroveInfo(
+    String? assistantMessage,
+    double? confidence,
+    String? topTag,
+  ) {
     // Inform ang user nga walay match ang model sa mangrove species
     final String message =
         (assistantMessage != null && assistantMessage.trim().isNotEmpty)
         ? assistantMessage.trim()
         : 'No mangrove detected. This likely is not a mangrove.';
+    final String details = confidence != null
+        ? '$message\nAssistant confidence: ${(confidence * 100).toStringAsFixed(1)}%'
+        : message;
+
+    final String fullDetails = (topTag != null && topTag.isNotEmpty)
+        ? '$details\nDetected as: $topTag'
+        : details;
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(message),
+        content: Text(fullDetails),
         backgroundColor: Colors.orange[700],
-        duration: const Duration(seconds: 3),
+        duration: const Duration(seconds: 4),
       ),
     );
   }
@@ -704,6 +743,9 @@ class _ScanPageState extends State<ScanPage> {
       ),
     );
   }
+
+  // Image overlay removed per user request. Confidence is shown in the
+  // non-mangrove card and in the SnackBar instead.
 
   Widget _buildResultsCard() {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
@@ -930,6 +972,43 @@ class _ScanPageState extends State<ScanPage> {
               'No class matched the model output. Try another angle or take a clearer photo.',
               style: TextStyle(fontSize: 14, color: subtextColor, height: 1.5),
             ),
+            if (_assistantConfidence != null) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: isDarkMode ? Colors.orange[900] : Colors.orange[50],
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Assistant confidence',
+                      style: TextStyle(fontSize: 14, color: subtextColor),
+                    ),
+                    Text(
+                      '${(_assistantConfidence! * 100).toStringAsFixed(1)}%',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.orange[800],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (_assistantTopTag != null && _assistantTopTag!.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Detected as: $_assistantTopTag',
+                  style: TextStyle(fontSize: 13, color: subtextColor),
+                ),
+              ],
+            ],
           ],
         ),
       ),
@@ -982,7 +1061,10 @@ class _ScanPageState extends State<ScanPage> {
             Flexible(
               child: Text(
                 'Please wait while analyzing the image.',
-                style: TextStyle(fontSize: 13, color: accent.withValues(alpha: 0.8)),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: accent.withValues(alpha: 0.8),
+                ),
                 textAlign: TextAlign.center,
               ),
             ),
@@ -991,6 +1073,7 @@ class _ScanPageState extends State<ScanPage> {
       ],
     );
   }
+  // No extra helpers needed — top tag is stored in `_assistantTopTag`.
 
   Widget _buildActionButtons() {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
